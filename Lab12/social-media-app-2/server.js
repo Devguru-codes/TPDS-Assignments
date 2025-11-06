@@ -22,9 +22,9 @@ app.use(express.json());
 
 // 🌩️ Cloudinary config (fill these!)
 cloudinary.config({
-  cloud_name: "ddbrj192s",
-  api_key: "936577949647196",
-  api_secret: "jepn1v44EwE_-R64aiWgJPphvTY",
+  cloud_name: "a",
+  api_key: "a",
+  api_secret: "a-a",
 });
 
 let db;
