@@ -1,52 +1,51 @@
 const express = require('express');
 const cors = require('cors');
-const mysql = require('mysql2');
+const path = require('path');
 const app = express();
 const port = 5001; // Different port to avoid conflicts with previous labs
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'client')));
 
-// MySQL connection
-const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root', // Replace with your MySQL username
-  password: 'Future56*', // Replace with your MySQL password
-  database: 'book_reviews_db'
-});
-
-db.connect(err => {
-  if (err) {
-    console.error('Error connecting to MySQL:', err);
-    return;
+// In-memory storage for reviews
+let reviews = [
+  {
+    id: 1,
+    title: 'To Kill a Mockingbird',
+    author: 'Harper Lee',
+    rating: 5,
+    review_text: 'A timeless classic that explores themes of racial injustice and moral growth. The characters are unforgettable, especially Atticus Finch. A must-read for everyone.'
+  },
+  {
+    id: 2,
+    title: '1984',
+    author: 'George Orwell',
+    rating: 5,
+    review_text: 'A chilling dystopian novel that remains incredibly relevant today. Orwell\'s vision of a totalitarian future is both terrifying and thought-provoking.'
+  },
+  {
+    id: 3,
+    title: 'The Great Gatsby',
+    author: 'F. Scott Fitzgerald',
+    rating: 4,
+    review_text: 'Beautiful prose and a fascinating look at the American Dream. The symbolism is rich and the story is both tragic and captivating.'
   }
-  console.log('Connected to MySQL');
-});
+];
+
+let nextId = 4;
 
 // Get all reviews
 app.get('/reviews', (req, res) => {
-  db.query('SELECT * FROM reviews', (err, results) => {
-    if (err) {
-      console.error('Error fetching reviews:', err);
-      res.status(500).json({ error: 'Database error' });
-      return;
-    }
-    res.json(results);
-  });
+  res.json(reviews);
 });
 
 // Get reviews filtered by rating
 app.get('/reviews/filter', (req, res) => {
   const { rating } = req.query;
   if (rating) {
-    db.query('SELECT * FROM reviews WHERE rating = ?', [rating], (err, results) => {
-      if (err) {
-        console.error('Error filtering reviews:', err);
-        res.status(500).json({ error: 'Database error' });
-        return;
-      }
-      res.json(results);
-    });
+    const filteredReviews = reviews.filter(review => review.rating === parseInt(rating));
+    res.json(filteredReviews);
   } else {
     res.json([]);
   }
@@ -59,47 +58,39 @@ app.post('/reviews', (req, res) => {
     res.status(400).json({ error: 'All fields are required, and rating must be between 1 and 5' });
     return;
   }
-  const query = 'INSERT INTO reviews (title, author, rating, review_text) VALUES (?, ?, ?, ?)';
-  db.query(query, [title, author, rating, review_text], (err, result) => {
-    if (err) {
-      console.error('Error adding review:', err);
-      res.status(500).json({ error: 'Database error' });
-      return;
-    }
-    res.json({ id: result.insertId, title, author, rating, review_text });
-  });
+  const newReview = {
+    id: nextId++,
+    title,
+    author,
+    rating: parseInt(rating),
+    review_text
+  };
+  reviews.push(newReview);
+  res.json(newReview);
 });
 
 // Update a review
 app.put('/reviews/:id', (req, res) => {
-  const { id } = req.params;
+  const id = parseInt(req.params.id);
   const { title, author, rating, review_text } = req.body;
   if (!title || !author || !rating || !review_text || rating < 1 || rating > 5) {
     res.status(400).json({ error: 'All fields are required, and rating must be between 1 and 5' });
     return;
   }
-  const query = 'UPDATE reviews SET title = ?, author = ?, rating = ?, review_text = ? WHERE id = ?';
-  db.query(query, [title, author, rating, review_text, id], (err) => {
-    if (err) {
-      console.error('Error updating review:', err);
-      res.status(500).json({ error: 'Database error' });
-      return;
-    }
-    res.json({ id, title, author, rating, review_text });
-  });
+  const index = reviews.findIndex(review => review.id === id);
+  if (index !== -1) {
+    reviews[index] = { id, title, author, rating: parseInt(rating), review_text };
+    res.json(reviews[index]);
+  } else {
+    res.status(404).json({ error: 'Review not found' });
+  }
 });
 
 // Delete a review
 app.delete('/reviews/:id', (req, res) => {
-  const { id } = req.params;
-  db.query('DELETE FROM reviews WHERE id = ?', [id], (err) => {
-    if (err) {
-      console.error('Error deleting review:', err);
-      res.status(500).json({ error: 'Database error' });
-      return;
-    }
-    res.json({ message: 'Review deleted' });
-  });
+  const id = parseInt(req.params.id);
+  reviews = reviews.filter(review => review.id !== id);
+  res.json({ message: 'Review deleted' });
 });
 
 app.listen(port, () => {

@@ -1,31 +1,33 @@
 const express = require("express");
 const cors = require("cors");
-const mysql = require("mysql2");
+const path = require("path");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const axios = require("axios");
 const app = express();
-const port = 5003; // Different port to avoid conflicts
-const JWT_SECRET = "your_jwt_secret_key"; // Replace with secure key
+const port = 5003;
+const JWT_SECRET = "your_jwt_secret_key";
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, "client")));
 
-// MySQL connection
-const db = mysql.createConnection({
-  host: "localhost",
-  user: "root", // Replace with your MySQL username
-  password: "Future56*", // Replace with your MySQL password
-  database: "job_board_db",
-});
+// In-memory storage
+let users = [
+  { id: 1, username: "alice", password: "$2b$10$YZ5yZKx7qhLx.Kg8vR8N9OqKvFGx8VYZcJ4B3K5H9Y6xH7qL", skills: "JavaScript, React, Node.js" },
+  { id: 2, username: "bob", password: "$2b$10$YZ5yZKx7qhLx.Kg8vR8N9OqKvFGx8VYZcJ4B3K5H9Y6xH7qL", skills: "Python, Django, Machine Learning" }
+];
 
-db.connect((err) => {
-  if (err) {
-    console.error("Error connecting to MySQL:", err);
-    return;
-  }
-  console.log("Connected to MySQL");
-});
+let jobs = [
+  { id: 1, title: "Frontend Developer", description: "Build modern web apps", skills_required: "JavaScript, React, CSS", user_id: 1, username: "alice" },
+  { id: 2, title: "Backend Developer", description: "Create robust APIs", skills_required: "Node.js, Express, MongoDB", user_id: 1, username: "alice" },
+  { id: 3, title: "Data Scientist", description: "Analyze and visualize data", skills_required: "Python, Machine Learning, TensorFlow", user_id: 2, username: "bob" }
+];
+
+let applications = [];
+
+let nextUserId = 3;
+let nextJobId = 4;
+let nextAppId = 1;
 
 // Register a new user
 app.post("/register", async (req, res) => {
@@ -33,50 +35,31 @@ app.post("/register", async (req, res) => {
   if (!username || !password || !skills) {
     return res.status(400).json({ error: "All fields are required" });
   }
+  if (users.find(u => u.username === username)) {
+    return res.status(400).json({ error: "Username already exists" });
+  }
   const hashedPassword = await bcrypt.hash(password, 10);
-  db.query(
-    "INSERT INTO users (username, password, skills) VALUES (?, ?, ?)",
-    [username, hashedPassword, skills],
-    (err) => {
-      if (err) {
-        console.error("Error registering user:", err);
-        return res
-          .status(500)
-          .json({ error: "Username already exists or database error" });
-      }
-      res.json({ message: "User registered successfully" });
-    }
-  );
+  const newUser = { id: nextUserId++, username, password: hashedPassword, skills };
+  users.push(newUser);
+  res.json({ message: "User registered successfully" });
 });
 
 // Login user
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) {
-    return res
-      .status(400)
-      .json({ error: "Username and password are required" });
+    return res.status(400).json({ error: "Username and password are required" });
   }
-  db.query(
-    "SELECT * FROM users WHERE username = ?",
-    [username],
-    async (err, results) => {
-      if (err || results.length === 0) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
-      const user = results[0];
-      const isMatch = await bcrypt.compare(password, user.password);
-      if (!isMatch) {
-        return res.status(401).json({ error: "Invalid credentials" });
-      }
-      const token = jwt.sign(
-        { userId: user.id, username: user.username },
-        JWT_SECRET,
-        { expiresIn: "1h" }
-      );
-      res.json({ token, username, skills: user.skills });
-    }
-  );
+  const user = users.find(u => u.username === username);
+  if (!user) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+  const isMatch = await bcrypt.compare(password, user.password);
+  if (!isMatch) {
+    return res.status(401).json({ error: "Invalid credentials" });
+  }
+  const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, { expiresIn: "1h" });
+  res.json({ token, username, skills: user.skills });
 });
 
 // Middleware to verify JWT
@@ -99,81 +82,44 @@ const authenticateToken = (req, res, next) => {
 app.get("/jobs", (req, res) => {
   const { page = 1, limit = 10, search = "" } = req.query;
   const offset = (page - 1) * limit;
-  const query =
-    "SELECT j.*, u.username FROM jobs j JOIN users u ON j.user_id = u.id WHERE j.title LIKE ? OR j.description LIKE ? LIMIT ? OFFSET ?";
-  db.query(
-    query,
-    [`%${search}%`, `%${search}%`, parseInt(limit), parseInt(offset)],
-    (err, results) => {
-      if (err) {
-        console.error("Error fetching jobs:", err);
-        return res.status(500).json({ error: "Database error" });
-      }
-      db.query(
-        "SELECT COUNT(*) as total FROM jobs WHERE title LIKE ? OR description LIKE ?",
-        [`%${search}%`, `%${search}%`],
-        (err, countResult) => {
-          if (err) {
-            console.error("Error counting jobs:", err);
-            return res.status(500).json({ error: "Database error" });
-          }
-          res.json({ jobs: results, total: countResult[0].total });
-        }
-      );
-    }
-  );
+  
+  let filteredJobs = jobs;
+  if (search) {
+    filteredJobs = jobs.filter(j => 
+      j.title.toLowerCase().includes(search.toLowerCase()) ||
+      j.description.toLowerCase().includes(search.toLowerCase())
+    );
+  }
+  
+  const paginatedJobs = filteredJobs.slice(offset, offset + parseInt(limit));
+  res.json({ jobs: paginatedJobs, total: filteredJobs.length });
 });
 
-// Get AI-recommended jobs
-app.get("/jobs/recommended", authenticateToken, async (req, res) => {
-  db.query(
-    "SELECT skills FROM users WHERE id = ?",
-    [req.user.userId],
-    async (err, userResult) => {
-      if (err || userResult.length === 0) {
-        return res.status(500).json({ error: "User not found" });
-      }
-      const userSkills = userResult[0].skills;
-      db.query("SELECT id, skills_required FROM jobs", async (err, jobs) => {
-        if (err) {
-          console.error("Error fetching jobs:", err);
-          return res.status(500).json({ error: "Database error" });
-        }
-
-        if (jobs.length === 0) {
-          return res.json([]);
-        }
-
-        try {
-          const response = await axios.post("http://localhost:5004/recommend", {
-            user_skills: userSkills,
-            jobs,
-          });
-          const recommendedJobIds = response.data;
-
-          if (!recommendedJobIds || recommendedJobIds.length === 0) {
-            return res.json([]);
-          }
-
-          db.query(
-            "SELECT j.*, u.username FROM jobs j JOIN users u ON j.user_id = u.id WHERE j.id IN (?)",
-            [recommendedJobIds],
-            (err, results) => {
-              if (err) {
-                console.error("Error fetching recommended jobs:", err);
-                return res.status(500).json({ error: "Database error" });
-              }
-              res.json(results);
-            }
-          );
-        } catch (err) {
-          console.error("Error with AI recommendation:", err.message);
-          // If Python service is not available, return empty array
-          res.json([]);
-        }
-      });
-    }
-  );
+// Get AI-recommended jobs (using simple keyword matching)
+app.get("/jobs/recommended", authenticateToken, (req, res) => {
+  const user = users.find(u => u.id === req.user.userId);
+  if (!user) {
+    return res.status(500).json({ error: "User not found" });
+  }
+  
+  const userSkills = user.skills.toLowerCase().split(",").map(s => s.trim());
+  
+  // Calculate match score for each job
+  const jobScores = jobs.map(job => {
+    const jobSkills = job.skills_required.toLowerCase().split(",").map(s => s.trim());
+    const matchCount = userSkills.filter(skill => 
+      jobSkills.some(jobSkill => jobSkill.includes(skill) || skill.includes(jobSkill))
+    ).length;
+    return { ...job, score: matchCount };
+  });
+  
+  // Sort by score and return top 3
+  const recommendedJobs = jobScores
+    .filter(job => job.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+  
+  res.json(recommendedJobs);
 });
 
 // Add a new job
@@ -182,23 +128,17 @@ app.post("/jobs", authenticateToken, (req, res) => {
   if (!title || !description || !skills_required) {
     return res.status(400).json({ error: "All fields are required" });
   }
-  db.query(
-    "INSERT INTO jobs (title, description, skills_required, user_id) VALUES (?, ?, ?, ?)",
-    [title, description, skills_required, req.user.userId],
-    (err, result) => {
-      if (err) {
-        console.error("Error adding job:", err);
-        return res.status(500).json({ error: "Database error" });
-      }
-      res.json({
-        id: result.insertId,
-        title,
-        description,
-        skills_required,
-        user_id: req.user.userId,
-      });
-    }
-  );
+  const user = users.find(u => u.id === req.user.userId);
+  const newJob = {
+    id: nextJobId++,
+    title,
+    description,
+    skills_required,
+    user_id: req.user.userId,
+    username: user.username
+  };
+  jobs.push(newJob);
+  res.json(newJob);
 });
 
 // Apply to a job
@@ -207,55 +147,45 @@ app.post("/applications", authenticateToken, (req, res) => {
   if (!job_id) {
     return res.status(400).json({ error: "Job ID is required" });
   }
-  db.query(
-    "INSERT INTO applications (job_id, user_id) VALUES (?, ?)",
-    [job_id, req.user.userId],
-    (err, result) => {
-      if (err) {
-        console.error("Error applying to job:", err);
-        return res.status(500).json({ error: "Database error" });
-      }
-      res.json({ id: result.insertId, job_id, user_id: req.user.userId });
-    }
-  );
+  const job = jobs.find(j => j.id === parseInt(job_id));
+  if (!job) {
+    return res.status(404).json({ error: "Job not found" });
+  }
+  // Check if already applied
+  const alreadyApplied = applications.find(a => a.job_id === parseInt(job_id) && a.user_id === req.user.userId);
+  if (alreadyApplied) {
+    return res.status(400).json({ error: "Already applied to this job" });
+  }
+  const user = users.find(u => u.id === req.user.userId);
+  const newApplication = {
+    id: nextAppId++,
+    job_id: parseInt(job_id),
+    user_id: req.user.userId,
+    username: user.username
+  };
+  applications.push(newApplication);
+  res.json(newApplication);
 });
 
 // Get applications for a job
 app.get("/applications/:job_id", authenticateToken, (req, res) => {
   const { job_id } = req.params;
-  db.query(
-    "SELECT a.*, u.username FROM applications a JOIN users u ON a.user_id = u.id WHERE a.job_id = ?",
-    [job_id],
-    (err, results) => {
-      if (err) {
-        console.error("Error fetching applications:", err);
-        return res.status(500).json({ error: "Database error" });
-      }
-      res.json(results);
-    }
-  );
+  const jobApplications = applications.filter(a => a.job_id === parseInt(job_id));
+  res.json(jobApplications);
 });
 
 // Delete a job
 app.delete("/jobs/:id", authenticateToken, (req, res) => {
   const { id } = req.params;
-  db.query("DELETE FROM applications WHERE job_id = ?", [id], (err) => {
-    if (err) {
-      console.error("Error deleting applications:", err);
-      return res.status(500).json({ error: "Database error" });
-    }
-    db.query(
-      "DELETE FROM jobs WHERE id = ? AND user_id = ?",
-      [id, req.user.userId],
-      (err) => {
-        if (err) {
-          console.error("Error deleting job:", err);
-          return res.status(500).json({ error: "Database error" });
-        }
-        res.json({ message: "Job deleted" });
-      }
-    );
-  });
+  const jobIndex = jobs.findIndex(j => j.id === parseInt(id) && j.user_id === req.user.userId);
+  if (jobIndex === -1) {
+    return res.status(404).json({ error: "Job not found or unauthorized" });
+  }
+  // Remove associated applications
+  applications = applications.filter(a => a.job_id !== parseInt(id));
+  // Remove the job
+  jobs.splice(jobIndex, 1);
+  res.json({ message: "Job deleted" });
 });
 
 app.listen(port, () => {

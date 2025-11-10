@@ -1,0 +1,20 @@
+# Python Requirements for TPDS Labs
+# These are needed for AI/ML features in Labs 9-12
+# Install using: pip3 install -r requirements.txt
+
+# Flask - Web framework for Python microservices
+Flask==3.0.0
+
+# scikit-learn - Machine learning library for AI recommendations
+scikit-learn==1.3.2
+
+# numpy - Numerical computing (required by scikit-learn)
+numpy==1.26.2
+
+# textblob - Natural language processing for sentiment analysis
+textblob==0.17.1
+
+# Note: Labs 1-9 are fully converted to use in-memory storage
+# and don't require Python or these dependencies to run.
+# These are kept for reference if you want to add Python-based
+# AI features back to Labs 9-12.

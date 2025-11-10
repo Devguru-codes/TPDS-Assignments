@@ -1,30 +1,33 @@
 const express = require('express');
 const cors = require('cors');
-const mysql = require('mysql2');
+const path = require('path');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const app = express();
-const port = 5002; // Different port to avoid conflicts
-const JWT_SECRET = 'abcd'; // Replace with a secure key in production
+const port = 5002;
+const JWT_SECRET = 'abcd';
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'client')));
 
-// MySQL connection
-const db = mysql.createConnection({
-  host: 'localhost',
-  user: 'root', // Replace with your MySQL username
-  password: 'Future56*', // Replace with your MySQL password
-  database: 'freelance_db'
-});
+// In-memory storage
+let users = [
+  { id: 1, username: 'john_doe', password: '$2b$10$YZ5yZKx7qhLx.Kg8vR8N9OqKvFGx8VYZcJ4B3K5H9Y6xH7qL' },
+  { id: 2, username: 'jane_smith', password: '$2b$10$YZ5yZKx7qhLx.Kg8vR8N9OqKvFGx8VYZcJ4B3K5H9Y6xH7qL' }
+];
+let projects = [
+  { id: 1, title: 'Website Redesign', description: 'Need a modern website design with responsive layout', budget: 1500, user_id: 1, username: 'john_doe' },
+  { id: 2, title: 'Mobile App Development', description: 'Build a cross-platform mobile app for e-commerce', budget: 5000, user_id: 1, username: 'john_doe' }
+];
+let bids = [
+  { id: 1, project_id: 1, user_id: 2, username: 'jane_smith', amount: 1200 },
+  { id: 2, project_id: 1, user_id: 2, username: 'jane_smith', amount: 1400 }
+];
 
-db.connect(err => {
-  if (err) {
-    console.error('Error connecting to MySQL:', err);
-    return;
-  }
-  console.log('Connected to MySQL');
-});
+let nextUserId = 3;
+let nextProjectId = 3;
+let nextBidId = 3;
 
 // Register a new user
 app.post('/register', async (req, res) => {
@@ -32,14 +35,13 @@ app.post('/register', async (req, res) => {
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
   }
+  if (users.find(u => u.username === username)) {
+    return res.status(400).json({ error: 'Username already exists' });
+  }
   const hashedPassword = await bcrypt.hash(password, 10);
-  db.query('INSERT INTO users (username, password) VALUES (?, ?)', [username, hashedPassword], (err, result) => {
-    if (err) {
-      console.error('Error registering user:', err);
-      return res.status(500).json({ error: 'Username already exists or database error' });
-    }
-    res.json({ message: 'User registered successfully' });
-  });
+  const newUser = { id: nextUserId++, username, password: hashedPassword };
+  users.push(newUser);
+  res.json({ message: 'User registered successfully' });
 });
 
 // Login user
@@ -48,18 +50,16 @@ app.post('/login', async (req, res) => {
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password are required' });
   }
-  db.query('SELECT * FROM users WHERE username = ?', [username], async (err, results) => {
-    if (err || results.length === 0) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-    const user = results[0];
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '1h' });
-    res.json({ token });
-  });
+  const user = users.find(u => u.username === username);
+  if (!user) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+  const isMatch = await bcrypt.compare(password, user.password);
+  if (!isMatch) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+  const token = jwt.sign({ userId: user.id, username: user.username }, JWT_SECRET, { expiresIn: '1h' });
+  res.json({ token, username: user.username });
 });
 
 // Middleware to verify JWT
@@ -80,13 +80,7 @@ const authenticateToken = (req, res, next) => {
 
 // Get all projects
 app.get('/projects', (req, res) => {
-  db.query('SELECT p.*, u.username FROM projects p JOIN users u ON p.user_id = u.id', (err, results) => {
-    if (err) {
-      console.error('Error fetching projects:', err);
-      return res.status(500).json({ error: 'Database error' });
-    }
-    res.json(results);
-  });
+  res.json(projects);
 });
 
 // Add a new project
@@ -95,17 +89,16 @@ app.post('/projects', authenticateToken, (req, res) => {
   if (!title || !description || !budget || budget <= 0) {
     return res.status(400).json({ error: 'All fields are required, and budget must be positive' });
   }
-  db.query(
-    'INSERT INTO projects (title, description, budget, user_id) VALUES (?, ?, ?, ?)',
-    [title, description, budget, req.user.userId],
-    (err, result) => {
-      if (err) {
-        console.error('Error adding project:', err);
-        return res.status(500).json({ error: 'Database error' });
-      }
-      res.json({ id: result.insertId, title, description, budget, user_id: req.user.userId });
-    }
-  );
+  const newProject = {
+    id: nextProjectId++,
+    title,
+    description,
+    budget: parseFloat(budget),
+    user_id: req.user.userId,
+    username: req.user.username
+  };
+  projects.push(newProject);
+  res.json(newProject);
 });
 
 // Add a bid to a project
@@ -114,47 +107,29 @@ app.post('/bids', authenticateToken, (req, res) => {
   if (!project_id || !amount || amount <= 0) {
     return res.status(400).json({ error: 'Project ID and positive bid amount are required' });
   }
-  db.query(
-    'INSERT INTO bids (project_id, user_id, amount) VALUES (?, ?, ?)',
-    [project_id, req.user.userId, amount],
-    (err, result) => {
-      if (err) {
-        console.error('Error adding bid:', err);
-        return res.status(500).json({ error: 'Database error' });
-      }
-      res.json({ id: result.insertId, project_id, user_id: req.user.userId, amount });
-    }
-  );
+  const newBid = {
+    id: nextBidId++,
+    project_id: parseInt(project_id),
+    user_id: req.user.userId,
+    username: req.user.username,
+    amount: parseFloat(amount)
+  };
+  bids.push(newBid);
+  res.json(newBid);
 });
 
 // Get bids for a project
 app.get('/bids/:project_id', (req, res) => {
-  const { project_id } = req.params;
-  db.query('SELECT b.*, u.username FROM bids b JOIN users u ON b.user_id = u.id WHERE b.project_id = ?', [project_id], (err, results) => {
-    if (err) {
-      console.error('Error fetching bids:', err);
-      return res.status(500).json({ error: 'Database error' });
-    }
-    res.json(results);
-  });
+  const projectBids = bids.filter(b => b.project_id === parseInt(req.params.project_id));
+  res.json(projectBids);
 });
 
 // Delete a project
 app.delete('/projects/:id', authenticateToken, (req, res) => {
-  const { id } = req.params;
-  db.query('DELETE FROM bids WHERE project_id = ?', [id], (err) => {
-    if (err) {
-      console.error('Error deleting bids:', err);
-      return res.status(500).json({ error: 'Database error' });
-    }
-    db.query('DELETE FROM projects WHERE id = ? AND user_id = ?', [id, req.user.userId], (err) => {
-      if (err) {
-        console.error('Error deleting project:', err);
-        return res.status(500).json({ error: 'Database error' });
-      }
-      res.json({ message: 'Project deleted' });
-    });
-  });
+  const id = parseInt(req.params.id);
+  projects = projects.filter(p => !(p.id === id && p.user_id === req.user.userId));
+  bids = bids.filter(b => b.project_id !== id);
+  res.json({ message: 'Project deleted' });
 });
 
 app.listen(port, () => {
