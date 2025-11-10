@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quote Generator - Lab 4</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>💭 Random Quote Generator</h1>
+        
+        <div class="quote-section">
+            <div class="quote-display">
+                <p id="quoteText" class="quote-text">Click the button to get a random quote!</p>
+                <p id="quoteAuthor" class="quote-author"></p>
+            </div>
+            <div class="button-group">
+                <button id="newQuoteBtn" class="btn btn-primary">✨ New Quote</button>
+                <button id="favoriteBtn" class="btn btn-favorite" disabled>❤️ Add to Favorites</button>
+            </div>
+        </div>
+
+        <div class="favorites-section">
+            <h2>⭐ Favorite Quotes</h2>
+            <div id="favoritesList"></div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

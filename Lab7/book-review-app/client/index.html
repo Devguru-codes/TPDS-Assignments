@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book Reviews - Lab 7</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📚 Book Reviews</h1>
+            <p class="subtitle">Share your thoughts on books you've read</p>
+        </header>
+
+        <div class="content-wrapper">
+            <div class="form-section">
+                <h2>Add Book Review</h2>
+                <form id="reviewForm">
+                    <div class="form-group">
+                        <label for="bookTitle">📖 Book Title</label>
+                        <input type="text" id="bookTitle" placeholder="Enter book title" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="bookAuthor">✍️ Author</label>
+                        <input type="text" id="bookAuthor" placeholder="Enter author name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="bookRating">⭐ Rating (1-5)</label>
+                        <div class="rating-input">
+                            <input type="range" id="bookRating" min="1" max="5" value="5" required>
+                            <span id="ratingValue" class="rating-display">5</span>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="bookReview">📝 Your Review</label>
+                        <textarea id="bookReview" rows="6" placeholder="Write your review here..." required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">✨ Submit Review</button>
+                </form>
+
+                <div class="filter-box">
+                    <h3>Filter by Rating</h3>
+                    <div class="filter-buttons">
+                        <button class="btn btn-filter" onclick="filterByRating(5)">⭐ 5 Stars</button>
+                        <button class="btn btn-filter" onclick="filterByRating(4)">⭐ 4 Stars</button>
+                        <button class="btn btn-filter" onclick="filterByRating(3)">⭐ 3 Stars</button>
+                        <button class="btn btn-filter" onclick="filterByRating(2)">⭐ 2 Stars</button>
+                        <button class="btn btn-filter" onclick="filterByRating(1)">⭐ 1 Star</button>
+                        <button class="btn btn-clear" onclick="loadReviews()">Show All</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="reviews-section">
+                <div class="section-header">
+                    <h2>All Reviews</h2>
+                </div>
+                <div id="reviewsList"></div>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>

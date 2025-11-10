@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Event Planner - Lab 5</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📅 Event Planner</h1>
+            <p class="subtitle">Organize your events effortlessly</p>
+        </header>
+
+        <div class="content-wrapper">
+            <div class="form-section">
+                <h2>Create New Event</h2>
+                <form id="eventForm">
+                    <div class="form-group">
+                        <label for="eventTitle">📝 Event Title</label>
+                        <input type="text" id="eventTitle" placeholder="Enter event title" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="eventDate">📆 Event Date</label>
+                        <input type="date" id="eventDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="eventDescription">📄 Description</label>
+                        <textarea id="eventDescription" rows="4" placeholder="Enter event description" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">✨ Create Event</button>
+                </form>
+            </div>
+
+            <div class="events-section">
+                <div class="section-header">
+                    <h2>All Events</h2>
+                    <div class="filter-section">
+                        <input type="date" id="filterDate" placeholder="Filter by date">
+                        <button id="filterBtn" class="btn btn-filter">🔍 Filter</button>
+                        <button id="clearFilterBtn" class="btn btn-secondary">✖ Clear</button>
+                    </div>
+                </div>
+                <div id="eventsList"></div>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
